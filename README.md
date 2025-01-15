@@ -1,235 +1,266 @@
 # Sprite Extractor
 
-A robust, feature-rich tool for extracting individual sprites from sprite sheets. Built with OpenCV and Python, this tool offers both contour-based and grid-based extraction methods, along with various customization options.
+A sophisticated sprite extraction tool leveraging advanced computer vision techniques for robust sprite sheet analysis and extraction. Built with OpenCV and Python, it implements multiple extraction strategies with configurable parameters for optimal results.
 
-## Features
+## Technical Overview
 
-- **Multiple Extraction Modes**
-  - Contour-based detection for irregularly spaced sprites
-  - Grid-based extraction for uniform sprite sheets
-  - Auto-cropping of empty space
+### Core Technologies
+- **OpenCV**: Primary computer vision framework for image processing and contour detection
+- **NumPy**: Efficient array operations and mathematical computations
+- **Rich**: Advanced terminal output and progress tracking
+- **Poetry**: Dependency and package management
+
+### Architecture Components
+
+#### 1. Image Processing Pipeline
+- **Preprocessing**
+  - Bilateral filtering for noise reduction while preserving edges
+  - Alpha channel handling with RGB correlation
+  - Adaptive thresholding using Otsu's method
+  - Morphological operations for edge enhancement
+
+#### 2. Sprite Detection Methods
+
+##### Contour-based Detection
+- **Algorithm**: Hierarchical contour detection using `cv2.RETR_TREE`
+- **Approximation**: `cv2.CHAIN_APPROX_TC89_KCOS` for precise contour representation
+- **Filtering Criteria**:
+  ```python
+  - Area ratio: sprite_area / bounding_box_area > 0.15
+  - Complexity: 4 <= vertices <= 100
+  - Solidity: convex_hull_area / contour_area > 0.2
+  - Aspect ratio: 0.1 <= width/height <= 10
+  ```
+
+##### Grid-based Detection
+- Uniform grid partitioning with configurable cell dimensions
+- Non-zero pixel analysis for sprite presence
+- Transparency awareness for RGBA images
+
+#### 3. Duplicate Detection System
+
+##### Sprite Signature Computation
+- **Perceptual Hash (pHash)**
+  - DCT-based hash generation
+  - 64x64 grayscale normalization
+  - 8x8 frequency coefficient matrix
   
-- **Format Support**
-  - PNG output with transparency
-  - JPEG with configurable quality
-  - WebP support for modern applications
-  
-- **Advanced Options**
-  - Customizable padding around sprites
-  - Size filtering (min/max dimensions)
-  - Adaptive thresholding
-  - JSON metadata generation
-  
-- **Quality Assurance**
-  - Sprite validation
-  - Overlap detection
-  - Detailed logging
-  - Progress tracking
-  - Rich console output
+- **Feature Vectors**
+  ```python
+  {
+      'phash': binary_hash,  # 64-bit perceptual hash
+      'histogram': hist,     # 16-bin intensity histogram
+      'edges': edge_sum,     # Canny edge detection signature
+      'moments': hu_moments, # 7 Hu moment invariants
+      'pattern': binary_pat  # Non-zero pixel pattern
+  }
+  ```
+
+##### Similarity Analysis
+- **Weighted Multi-criteria Comparison**
+  ```python
+  weights = {
+      'phash': 0.4,       # Perceptual hash comparison
+      'histogram': 0.2,   # Histogram correlation
+      'edges': 0.1,       # Edge pattern similarity
+      'moments': 0.2,     # Shape moment analysis
+      'dimensions': 0.1   # Size ratio comparison
+  }
+  ```
+
+##### Quality Assessment
+- **Sprite Selection Criteria**
+  ```python
+  score = (
+      0.4 * normalized_area +
+      0.3 * edge_density +
+      0.3 * position_score
+  )
+  ```
 
 ## Installation
 
-### Using Poetry (Recommended)
-
-1. Clone the repository:
+### Poetry Installation (Recommended)
 ```bash
+# Install Poetry
+curl -sSL https://install.python-poetry.org | python3 -
+
+# Clone and install project
 git clone https://github.com/ericsonwillians/sprite-extractor.git
 cd sprite-extractor
-```
-
-2. Install with Poetry:
-```bash
 poetry install
 ```
 
-### Manual Installation
-
-1. Ensure you have Python 3.8 or newer installed
-2. Install dependencies:
+### Development Environment Setup
 ```bash
-pip install opencv-python rich numpy
+# Create virtual environment
+poetry shell
+
+# Install development dependencies
+poetry install --with dev
 ```
 
-## Usage
+## Technical Usage Guide
 
-### Basic Command
+### Command-line Interface
 
+#### Basic Extraction
 ```bash
-poetry run sprite-extractor input_image.png output_directory/
+poetry run sprite-extractor <input_path> <output_path> [options]
 ```
 
-### Advanced Examples
-
-#### Grid-Based Extraction
-For sprite sheets with uniform grid layouts:
-```bash
-poetry run sprite-extractor input.png output/ \
-    --grid-mode \
-    --grid-size 32 32
-```
-
-#### Contour-Based Extraction with Options
-For sprite sheets with varying sprite sizes:
+#### Advanced Configuration
 ```bash
 poetry run sprite-extractor input.png output/ \
-    --format png \
-    --threshold 20 \
-    --padding 2 \
-    --min-size 10 \
-    --max-size 200 \
-    --auto-crop \
-    --metadata
+    --threshold 2 \         # Binary threshold value
+    --min-size 4 \         # Minimum sprite dimension
+    --max-size 150 \       # Maximum sprite dimension
+    --padding 3 \          # Padding pixels
+    --format png \         # Output format
+    --metadata \           # Generate metadata
+    --debug               # Enable debug logging
 ```
 
-### Command Line Arguments
+### Parameter Optimization
 
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `input_image` | Path to input sprite sheet | Required |
-| `output_dir` | Directory for extracted sprites | Required |
-| `--format` | Output format (png/jpg/webp) | png |
-| `--threshold` | Binarization threshold (0-255) | 10 |
-| `--padding` | Padding around sprites (pixels) | 0 |
-| `--min-size` | Minimum sprite dimension | 5 |
-| `--max-size` | Maximum sprite dimension | None |
-| `--grid-mode` | Enable grid-based extraction | False |
-| `--grid-size` | Grid cell dimensions (WIDTH HEIGHT) | Required with --grid-mode |
-| `--auto-crop` | Remove empty space around sprites | False |
-| `--metadata` | Generate JSON metadata | False |
-| `--debug` | Enable debug output | False |
+#### Threshold Selection
+- **Low values** (1-5): Best for clean sprite sheets with sharp edges
+- **Medium values** (5-20): Suitable for anti-aliased sprites
+- **High values** (20-50): Required for noisy or textured sprites
 
-## Project Structure
-
-```
-sprite-extractor/
-├── src/
-│   └── extractor.py
-├── tests/
-│   └── test_extractor.py
-├── pyproject.toml
-├── README.md
-└── LICENSE
+#### Size Constraints
+```python
+min_size = min(sprite_dimensions) * 0.5  # Minimum dimension
+max_size = max(sprite_dimensions) * 1.5  # Maximum dimension
 ```
 
-## Configuration
+#### Edge Cases
+1. **Transparent Sprites**
+   ```python
+   # Alpha channel processing
+   alpha = image[:, :, 3]
+   rgb = cv2.cvtColor(image[:, :, :3], cv2.COLOR_BGR2GRAY)
+   combined = cv2.addWeighted(alpha, 0.7, rgb, 0.3, 0)
+   ```
 
-### pyproject.toml
+2. **Overlapping Sprites**
+   ```python
+   # Overlap detection
+   intersection = max(0, min(x1 + w1, x2 + w2) - max(x1, x2)) * \
+                 max(0, min(y1 + h1, y2 + h2) - max(y1, y2))
+   overlap_ratio = intersection / min(w1 * h1, w2 * h2)
+   ```
 
-The project uses Poetry for dependency management. Here's the default configuration:
+### Output Specifications
 
-```toml
-[tool.poetry]
-name = "sprite_extractor"
-version = "0.1.0"
-description = "A tool to extract individual sprites from a sprite sheet into PNG images."
-authors = ["Your Name <your.email@example.com>"]
-license = "MIT"
-readme = "README.md"
-packages = [{ include = "src" }]
+#### Image Formats
+- **PNG**: Lossless compression with alpha channel
+  ```python
+  cv2.imwrite(filename, sprite, [cv2.IMWRITE_PNG_COMPRESSION, 9])
+  ```
+- **WebP**: Lossy compression with quality control
+  ```python
+  cv2.imwrite(filename, sprite, [cv2.IMWRITE_WEBP_QUALITY, 95])
+  ```
 
-[tool.poetry.dependencies]
-python = "^3.8"
-opencv-python = "^4.7.0"
-rich = "^13.3.3"
-numpy = "^1.24.3"
-
-[tool.poetry.dev-dependencies]
-pytest = "^7.2.2"
-
-[tool.poetry.scripts]
-sprite-extractor = "src.extractor:main"
-
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
-```
-
-## Output Files
-
-### Sprite Images
-Extracted sprites are saved with sequential numbering:
-- `sprite_0001.png`
-- `sprite_0002.png`
-- etc.
-
-### Metadata JSON
-When `--metadata` is enabled, generates `sprites_metadata.json`:
+#### Metadata Schema
 ```json
 {
-  "sprites": [
-    {
-      "index": 1,
-      "x": 0,
-      "y": 0,
-      "width": 32,
-      "height": 32,
-      "area": 1024,
-      "filename": "sprite_0001.png"
+  "sprites": [{
+    "index": int,
+    "x": int,
+    "y": int,
+    "width": int,
+    "height": int,
+    "area": int,
+    "signature": {
+      "phash": bytes,
+      "histogram": float[16],
+      "edges": float,
+      "moments": float[7]
     }
-  ],
-  "total_sprites": 1,
-  "extraction_mode": "contour",
+  }],
+  "extraction_mode": "contour" | "grid",
   "settings": {
-    "threshold": 10,
-    "padding": 0,
-    "min_size": 5,
-    "max_size": null,
-    "format": "png",
-    "auto_crop": false
+    "threshold": int,
+    "padding": int,
+    "min_size": int,
+    "max_size": int | null,
+    "format": "png" | "jpg" | "webp",
+    "auto_crop": boolean
   }
 }
 ```
 
-## Logging
+## Performance Considerations
 
-The tool maintains detailed logs in `sprite_extraction.log`, including:
-- Processing steps
-- Warnings and errors
-- Extraction statistics
-- Performance metrics
+### Time Complexity
+- Contour detection: O(n) where n = image pixels
+- Duplicate detection: O(k²) where k = number of sprites
+- Signature computation: O(w×h) per sprite
+
+### Memory Usage
+- Base image: width × height × channels bytes
+- Contour storage: ~8 bytes per contour point
+- Signature storage: ~128 bytes per sprite
+
+### Optimization Strategies
+1. **Preprocessing**
+   - Downscale large images before processing
+   - Use bilateral filtering selectively
+   
+2. **Contour Detection**
+   - Adjust approximation method based on sprite complexity
+   - Implement early filtering of invalid contours
+
+3. **Duplicate Detection**
+   - Implement spatial partitioning for large sprite sheets
+   - Use approximate nearest neighbor search for similarity
+
+## Error Handling and Logging
+
+### Log Levels
+```python
+logging.DEBUG    # Detailed processing information
+logging.INFO     # General progress updates
+logging.WARNING  # Non-critical issues
+logging.ERROR    # Critical failures
+```
+
+### Exception Hierarchy
+```python
+class SpriteExtractorError(Exception): pass
+class ImageLoadError(SpriteExtractorError): pass
+class ContourDetectionError(SpriteExtractorError): pass
+class DuplicateDetectionError(SpriteExtractorError): pass
+```
+
+## Testing
+
+### Unit Tests
+```bash
+poetry run pytest tests/
+```
+
+### Coverage Analysis
+```bash
+poetry run pytest --cov=src tests/
+```
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature-name`
-3. Commit changes: `git commit -am 'Add feature'`
-4. Push to branch: `git push origin feature-name`
-5. Submit a Pull Request
+### Development Workflow
+1. Fork repository
+2. Create feature branch
+3. Implement changes with tests
+4. Run full test suite
+5. Submit pull request
+
+### Code Style
+- Follow PEP 8 guidelines
+- Use type hints
+- Document complex algorithms
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Troubleshooting
-
-### Common Issues
-
-1. **No Sprites Detected**
-   - Try adjusting the `--threshold` value
-   - Check if the sprite sheet has transparency
-   - Enable `--debug` for more information
-
-2. **Sprites Are Cut Off**
-   - Increase `--padding` value
-   - Check `--min-size` and `--max-size` settings
-   - Try grid mode if sprites are uniform
-
-3. **Performance Issues**
-   - Reduce image size if possible
-   - Adjust `--threshold` for faster processing
-   - Use grid mode for uniform sprite sheets
-
-### Debug Mode
-
-Enable debug mode for detailed output:
-```bash
-poetry run sprite-extractor input.png output/ --debug
-```
-
-## Performance Tips
-
-1. Use grid mode when possible
-2. Optimize input images
-3. Adjust threshold values
-4. Consider format compression settings
-5. Use appropriate min/max size filters
+MIT License - See LICENSE file for details
